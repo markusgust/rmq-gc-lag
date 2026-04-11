@@ -45,8 +45,6 @@ main-workload:
 		--consumers 100 \
 		--size 122880 \
 		--confirm 100 \
-		--qos 130 \
-		--consumer-latency 360000000 \
 		--variable-rate "2:$$(($(BASELINE_MINUTES) * 60))" \
 		--variable-rate '5:86400' \
 		--id main-workload \
