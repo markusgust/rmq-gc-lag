@@ -2,8 +2,15 @@ URIS := amqp://guest:guest@10.0.1.121:5672,amqp://guest:guest@10.0.1.74:5672,amq
 PERF_TEST_JAR := /home/ec2-user/rabbitmq-perf-test/target/perf-test.jar
 JAVA_OPTS := -Xmx1700m
 BASELINE_MINUTES := 30
+MGMT := http://guest:guest@10.0.1.121:15672
 
-.PHONY: webhook-consumer webhook-publisher main-workload
+.PHONY: ha-policy webhook-consumer webhook-publisher main-workload
+
+ha-policy:
+	curl -sf -u guest:guest \
+		-X PUT $(MGMT)/api/policies/%2F/ha-all \
+		-H 'Content-Type: application/json' \
+		-d '{"pattern":".*","definition":{"ha-mode":"all","ha-sync-mode":"automatic","queue-version":2},"apply-to":"classic_queues"}'
 
 webhook-consumer:
 	python3 webhook_consumer.py \
