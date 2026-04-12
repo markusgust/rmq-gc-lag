@@ -34,7 +34,7 @@ create-vhost:
 webhook-consumer:
 	date -u +'started: %Y-%m-%dT%H:%M:%SZ' > webhook_consumer.log
 	python3 webhook_consumer.py \
-		--uri $(NODE0):5672/$(VHOST) \
+		--uri amqp://$(NODE0):5672/$(VHOST) \
 		2>&1 | tee -a webhook_consumer.log
 
 webhook-publisher:
