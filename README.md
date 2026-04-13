@@ -10,7 +10,7 @@ This repository was created to reproduce a production incident on Amazon MQ for 
 
 Three processes run concurrently:
 
-- **main-workload**: 100 classic queues (`repro-queue-1` through `repro-queue-100`) in the `/` vhost. 100 producers + 100 consumers, 120 KB messages, consumers acking immediately. Variable rate: 2 msg/s per producer (200 msg/s aggregate) for `BASELINE_MINUTES`, then 5 msg/s per producer (500 msg/s aggregate) indefinitely.
+- **main-workload**: 100 classic queues (`repro-queue-1` through `repro-queue-100`) in the `/` vhost. 100 producers + 100 consumers, 120 KB messages, consumers acking immediately. Variable rate: 2 msg/s per producer (200 msg/s aggregate) for `BASELINE_MINUTES` (default: 7 minutes), then 5 msg/s per producer (500 msg/s aggregate) indefinitely.
 
 - **webhook-publisher**: 1 producer publishing 3 msg/s to `webhook_retry_queue`.
 

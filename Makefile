@@ -1,6 +1,6 @@
 PERF_TEST_JAR := /home/ec2-user/rabbitmq-perf-test/target/perf-test.jar
 JAVA_OPTS := -Xmx1700m
-BASELINE_MINUTES := 30
+BASELINE_MINUTES := 7
 NODE := guest:guest@10.0.1.90
 MGMT := http://$(NODE):15672
 URI := amqp://$(NODE):5672
