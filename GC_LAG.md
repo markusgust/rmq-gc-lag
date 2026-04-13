@@ -41,9 +41,15 @@ Two separate test runs, both showing no GC lag:
 - Disk declined ~3 GB during the baseline phase (182.96 GB at 14:43 from 185.79 GB start)
 - Disk recovered mid-run as held acks fired — result inconclusive
 
-**Run 2 (2026-04-13, 7-minute baseline, started 18:03:15 UTC):**
+**Run 2 (2026-04-13, 7-minute baseline, started 18:03:15 UTC, ran ~65 minutes):**
 - Disk declined ~3 GB during baseline phase (184.27 → 182.83 GB by 18:08)
-- Disk flat since spike started at 18:10 — result inconclusive, run ongoing
+- Disk recovered to 184.99 GB once spike started at 18:10 (GC catching up)
+- Disk declined again to 181.66 GB by 18:38, then recovered to 183.06 GB by 19:09
+- Pattern: oscillation within a ~3 GB band throughout the spike phase
+
+**Conclusion:** `main` single-instance does NOT reproduce the runaway disk accumulation
+seen with the 20251225 cluster build. GC keeps up on average — disk oscillates as
+batches of held acks fire and free segment files, rather than accumulating continuously.
 
 ## Workload
 
@@ -121,9 +127,31 @@ Vhost isolation experiment results (awsbuild_20251225, 3-node cluster):
 
 ## Next Steps
 
-- Complete `main` Run 2 (30-minute mark at 18:33:15 UTC) and record final disk reading
-- If `main` reproduces: file a GitHub issue against `rabbitmq/rabbitmq-server` with
-  reproduction steps pointing to https://github.com/lukebakken/rmq-gc-lag, tag
-  @lhoguin (https://github.com/lhoguin)
-- If `main` does not reproduce: investigate whether the single-instance topology
-  (no mirroring) is a required condition, or whether the workload needs adjustment
+### In progress: `main` Run 2
+
+Started 18:03:15 UTC. Disk declined ~2 GB during baseline phase then recovered once
+spike started. At 18:21 UTC: 184.99 GB free, 502/s publish, 1039 unacked. GC appears
+to be keeping up at spike rate. Run completes at 18:33:15 UTC.
+
+### Planned: awsbuild_20251225, single instance, m7g.large
+
+Run the same workload against the Amazon MQ 20251225 build on a single-instance
+m7g.large (no `ha-mode: all`).
+
+- If GC lag is observed: the bug reproduces without mirroring; single-instance
+  topology is sufficient.
+- If GC lag is NOT observed: `ha-mode: all` is a required condition. Mirroring
+  generates additional `remove_message` calls from mirror processes, which may be
+  what drives `gc_candidates` to be populated continuously — causing the
+  `maps:without` deferral in `e033d97f37` to perpetually exclude all GC candidates.
+
+### After single-instance 20251225 result is known
+
+- If mirroring is required: file the GitHub issue noting that the bug requires
+  `ha-mode: all` and is not reproducible on a single instance. Classic mirrored
+  queues are removed in RabbitMQ 4.x, which may explain why `main` does not reproduce.
+- If mirroring is not required: re-examine the `main` workload — the bug may still
+  be present but the m7g.large's 2 vCPUs may not generate enough load with 100
+  queues to trigger it reliably.
+
+In either case: tag @lhoguin (https://github.com/lhoguin) on the issue.
