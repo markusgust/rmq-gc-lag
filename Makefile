@@ -6,7 +6,13 @@ MGMT := http://$(NODE):15672
 URI := amqp://$(NODE):5672
 
 .ONESHELL:
-.PHONY: classic-policy clean webhook-consumer webhook-publisher main-workload
+.PHONY: classic-policy clean webhook-consumer webhook-publisher main-workload setup
+
+setup:
+	sudo dnf install --assumeyes python python-pip
+	python -m pip install pipenv
+	pipenv install
+	make -C $(HOME)/rabbitmq-perf-test binary
 
 classic-policy:
 	curl -sf -u guest:guest \
