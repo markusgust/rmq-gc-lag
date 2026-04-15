@@ -39,37 +39,42 @@ On the host running the workload:
 
 - Java 11+ (`java -version` to verify)
 - Python 3.9+
-- RabbitMQ reachable at the address set in `env.mk` (see below)
+- RabbitMQ reachable at the AMQP URL set in `env.mk` (see below)
 
 Both `perf-test.jar` (v2.24.0) and `pika` (v1.3.2) are vendored in `lib/` and
 require no installation. `make setup` verifies Java is available.
 
 ## Configuration via env.mk
 
-Create `~/env.mk` with the RabbitMQ node address(es) before running any workload.
+Create `~/env.mk` with the AMQP URL(s) before running any workload. Credentials
+and vhost are parsed from the URL automatically. The management API URL defaults
+to `http://<host>:15672` but can be overridden with `MGMT_URL`.
 
 **Single-instance** (`MODE=single`, the default):
 
 ```make
-RMQ_NODE ?= <private-ip>
+AMQP_URL ?= amqp://guest:guest@10.0.1.90:5672
 ```
 
 **Cluster** (`MODE=cluster`):
 
 ```make
-RMQ_NODE0 ?= <node-0-private-ip>
-RMQ_NODE1 ?= <node-1-private-ip>
-RMQ_NODE2 ?= <node-2-private-ip>
+AMQP_URL0 ?= amqp://guest:guest@10.0.1.40:5672
+AMQP_URL1 ?= amqp://guest:guest@10.0.1.122:5672
+AMQP_URL2 ?= amqp://guest:guest@10.0.1.254:5672
 ```
 
 If `~/env.mk` is absent, set the variables manually on the command line:
 
 ```bash
 # single
-make main-workload RMQ_NODE=10.0.1.90
+make main-workload AMQP_URL=amqp://guest:guest@10.0.1.90:5672
 
 # cluster
-make main-workload MODE=cluster RMQ_NODE0=10.0.1.40 RMQ_NODE1=10.0.1.122 RMQ_NODE2=10.0.1.254
+make main-workload MODE=cluster \
+  AMQP_URL0=amqp://guest:guest@10.0.1.40:5672 \
+  AMQP_URL1=amqp://guest:guest@10.0.1.122:5672 \
+  AMQP_URL2=amqp://guest:guest@10.0.1.254:5672
 ```
 
 ## Makefile Targets

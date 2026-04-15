@@ -2,23 +2,29 @@ PERF_TEST_JAR := $(CURDIR)/lib/perf-test.jar
 JAVA_OPTS := -Xmx1700m
 BASELINE_MINUTES := 7
 
-NODE0 ?= guest:guest@$(RMQ_NODE0)
-NODE1 ?= guest:guest@$(RMQ_NODE1)
-NODE2 ?= guest:guest@$(RMQ_NODE2)
-MGMT := http://$(RMQ_NODE0):15672
-VHOST := %2F
-URIS := amqp://$(NODE0)/$(VHOST),amqp://$(NODE1):5672/$(VHOST),amqp://$(NODE2):5672/$(VHOST)
+AMQP_URL0 ?= amqp://guest:guest@localhost:5672
+AMQP_URL1 ?= amqp://guest:guest@localhost:5672
+AMQP_URL2 ?= amqp://guest:guest@localhost:5672
+
+# Parse URL components from primary node for management API access
+_USERINFO := $(shell echo '$(AMQP_URL0)' | sed -n 's|^amqps\{0,1\}://\([^@]*\)@.*|\1|p')
+_USER     := $(shell echo '$(_USERINFO)' | sed 's|:.*||')
+_HOST     := $(shell echo '$(AMQP_URL0)' | sed -n 's|^amqps\{0,1\}://[^@]*@\([^:/]*\).*|\1|p')
+_VHOST    := $(shell echo '$(AMQP_URL0)' | sed -n 's|^amqps\{0,1\}://[^@]*@[^/]*/\(.*\)|\1|p')
+MGMT_URL  ?= http://$(_HOST):15672
+VHOST     := $(if $(_VHOST),$(_VHOST),%2F)
+URIS      := $(AMQP_URL0),$(AMQP_URL1),$(AMQP_URL2)
 
 .ONESHELL:
-.PHONY: classic-policy clean slow-ack-consumer slow-ack-publisher main-workload setup debug
+.PHONY: ha-policy create-vhost clean slow-ack-consumer slow-ack-publisher main-workload setup debug
 
 debug:
-	@echo "NODE0: $(NODE0)"
-	@echo "NODE1: $(NODE1)"
-	@echo "NODE2: $(NODE2)"
-	@echo "MGMT:  $(MGMT)"
-	@echo "VHOST: $(VHOST)"
-	@echo "URIS:  $(URIS)"
+	@echo "AMQP_URL0: $(AMQP_URL0)"
+	@echo "AMQP_URL1: $(AMQP_URL1)"
+	@echo "AMQP_URL2: $(AMQP_URL2)"
+	@echo "MGMT_URL:  $(MGMT_URL)"
+	@echo "VHOST:     $(VHOST)"
+	@echo "URIS:      $(URIS)"
 
 setup:
 	@echo "=== Checking Java ==="
@@ -32,35 +38,35 @@ setup:
 	@echo "=== All checks passed ==="
 
 ha-policy:
-	curl -sf -u guest:guest \
-		-X PUT $(MGMT)/api/policies/$(VHOST)/ha-all \
+	curl -sf -u '$(_USERINFO)' \
+		-X PUT $(MGMT_URL)/api/policies/$(VHOST)/ha-all \
 		-H 'Content-Type: application/json' \
 		-d '{"pattern":".*","definition":{"ha-mode":"all","ha-sync-mode":"automatic","queue-version":2},"apply-to":"classic_queues"}'
 
 create-vhost:
-	curl -sf -u guest:guest \
-		-X PUT $(MGMT)/api/vhosts/$(VHOST) \
+	curl -sf -u '$(_USERINFO)' \
+		-X PUT $(MGMT_URL)/api/vhosts/$(VHOST) \
 		-H 'Content-Type: application/json' \
 		-d '{}'
-	curl -sf -u guest:guest \
-		-X PUT $(MGMT)/api/permissions/$(VHOST)/guest \
+	curl -sf -u '$(_USERINFO)' \
+		-X PUT $(MGMT_URL)/api/permissions/$(VHOST)/$(_USER) \
 		-H 'Content-Type: application/json' \
 		-d '{"configure":".*","write":".*","read":".*"}'
-	curl -sf -u guest:guest \
-		-X PUT $(MGMT)/api/policies/$(VHOST)/ha-all \
+	curl -sf -u '$(_USERINFO)' \
+		-X PUT $(MGMT_URL)/api/policies/$(VHOST)/ha-all \
 		-H 'Content-Type: application/json' \
 		-d '{"pattern":".*","definition":{"ha-mode":"all","ha-sync-mode":"automatic","queue-version":2},"apply-to":"classic_queues"}'
 
 slow-ack-consumer:
 	date -u +'started: %Y-%m-%dT%H:%M:%SZ' > slow_ack_consumer.log
 	python3 slow_ack_consumer.py \
-		--uri amqp://$(NODE0):5672 \
+		--uri '$(AMQP_URL0)' \
 		2>&1 | tee -a slow_ack_consumer.log
 
 slow-ack-publisher:
 	date -u +'started: %Y-%m-%dT%H:%M:%SZ' > slow_ack_publisher.log
 	java $(JAVA_OPTS) -jar $(PERF_TEST_JAR) \
-		--uris $(URIS) \
+		--uris '$(URIS)' \
 		--queue slow-ack-queue \
 		--flag mandatory \
 		--flag persistent \
@@ -75,14 +81,14 @@ slow-ack-publisher:
 		2>&1 | tee -a slow_ack_publisher.log
 
 clean:
-	curl -s -u guest:guest $(MGMT)/api/queues | \
+	curl -s -u '$(_USERINFO)' $(MGMT_URL)/api/queues | \
 		jq -r '.[] | "/api/queues/" + (.vhost | @uri) + "/" + (.name | @uri)' | \
-		xargs -I{} curl -sf -u guest:guest -X DELETE $(MGMT){}
+		xargs -I{} curl -sf -u '$(_USERINFO)' -X DELETE $(MGMT_URL){}
 
 main-workload:
 	date -u +'started: %Y-%m-%dT%H:%M:%SZ' > main_workload.log
 	java $(JAVA_OPTS) -jar $(PERF_TEST_JAR) \
-		--uris $(URIS) \
+		--uris '$(URIS)' \
 		--queue-pattern 'repro-queue-%d' \
 		--queue-pattern-from 1 \
 		--queue-pattern-to 100 \

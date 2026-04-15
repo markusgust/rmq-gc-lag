@@ -2,19 +2,22 @@ PERF_TEST_JAR := $(CURDIR)/lib/perf-test.jar
 JAVA_OPTS := -Xmx1700m
 BASELINE_MINUTES := 7
 
-NODE ?= guest:guest@$(RMQ_NODE)
-MGMT := http://$(RMQ_NODE):15672
-VHOST := %2F
-URI := amqp://$(NODE):5672
+AMQP_URL ?= amqp://guest:guest@localhost:5672
+
+# Parse URL components for management API access
+_USERINFO := $(shell echo '$(AMQP_URL)' | sed -n 's|^amqps\{0,1\}://\([^@]*\)@.*|\1|p')
+_HOST     := $(shell echo '$(AMQP_URL)' | sed -n 's|^amqps\{0,1\}://[^@]*@\([^:/]*\).*|\1|p')
+_VHOST    := $(shell echo '$(AMQP_URL)' | sed -n 's|^amqps\{0,1\}://[^@]*@[^/]*/\(.*\)|\1|p')
+MGMT_URL  ?= http://$(_HOST):15672
+VHOST     := $(if $(_VHOST),$(_VHOST),%2F)
 
 .ONESHELL:
 .PHONY: classic-policy clean slow-ack-consumer slow-ack-publisher main-workload gc-stress-workload burst-drain-workload fanout-setup fanout-publisher fanout-consumer setup debug
 
 debug:
-	@echo "NODE:  $(NODE)"
-	@echo "MGMT:  $(MGMT)"
-	@echo "VHOST: $(VHOST)"
-	@echo "URI:   $(URI)"
+	@echo "AMQP_URL: $(AMQP_URL)"
+	@echo "MGMT_URL: $(MGMT_URL)"
+	@echo "VHOST:    $(VHOST)"
 
 setup:
 	@echo "=== Checking Java ==="
@@ -28,21 +31,21 @@ setup:
 	@echo "=== All checks passed ==="
 
 classic-policy:
-	curl -sf -u guest:guest \
-		-X PUT $(MGMT)/api/policies/%2F/classic-all \
+	curl -sf -u '$(_USERINFO)' \
+		-X PUT $(MGMT_URL)/api/policies/$(VHOST)/classic-all \
 		-H 'Content-Type: application/json' \
 		-d '{"pattern":".*","definition":{"queue-version":2},"apply-to":"classic_queues"}'
 
 slow-ack-consumer:
 	date -u +'started: %Y-%m-%dT%H:%M:%SZ' > slow_ack_consumer.log
 	python3 slow_ack_consumer.py \
-		--uri amqp://$(NODE):5672 \
+		--uri '$(AMQP_URL)' \
 		2>&1 | tee -a slow_ack_consumer.log
 
 slow-ack-publisher:
 	date -u +'started: %Y-%m-%dT%H:%M:%SZ' > slow_ack_publisher.log
 	java $(JAVA_OPTS) -jar $(PERF_TEST_JAR) \
-		--uri $(URI) \
+		--uri '$(AMQP_URL)' \
 		--queue slow-ack-queue \
 		--flag mandatory \
 		--flag persistent \
@@ -57,14 +60,14 @@ slow-ack-publisher:
 		2>&1 | tee -a slow_ack_publisher.log
 
 clean:
-	curl -s -u guest:guest $(MGMT)/api/queues | \
+	curl -s -u '$(_USERINFO)' $(MGMT_URL)/api/queues | \
 		jq -r '.[] | "/api/queues/" + (.vhost | @uri) + "/" + (.name | @uri)' | \
-		xargs -I{} curl -sf -u guest:guest -X DELETE $(MGMT){}
+		xargs -I{} curl -sf -u '$(_USERINFO)' -X DELETE $(MGMT_URL){}
 
 main-workload:
 	date -u +'started: %Y-%m-%dT%H:%M:%SZ' > main_workload.log
 	java $(JAVA_OPTS) -jar $(PERF_TEST_JAR) \
-		--uri $(URI) \
+		--uri '$(AMQP_URL)' \
 		--queue-pattern 'repro-queue-%d' \
 		--queue-pattern-from 1 \
 		--queue-pattern-to 100 \
@@ -84,7 +87,7 @@ main-workload:
 gc-stress-workload:
 	date -u +'started: %Y-%m-%dT%H:%M:%SZ' > gc_stress_workload.log
 	java $(JAVA_OPTS) -jar $(PERF_TEST_JAR) \
-		--uri $(URI) \
+		--uri '$(AMQP_URL)' \
 		--queue gc-stress-queue \
 		--flag persistent \
 		--auto-delete false \
@@ -102,7 +105,7 @@ gc-stress-workload:
 burst-drain-workload:
 	date -u +'started: %Y-%m-%dT%H:%M:%SZ' > burst_drain_workload.log
 	java $(JAVA_OPTS) -jar $(PERF_TEST_JAR) \
-		--uri $(URI) \
+		--uri '$(AMQP_URL)' \
 		--queue burst-drain-queue \
 		--flag persistent \
 		--auto-delete false \
@@ -118,17 +121,17 @@ burst-drain-workload:
 		2>&1 | tee -a burst_drain_workload.log
 
 fanout-setup:
-	curl -sf -u guest:guest \
-		-X PUT $(MGMT)/api/exchanges/%2F/fanout-stress \
+	curl -sf -u '$(_USERINFO)' \
+		-X PUT $(MGMT_URL)/api/exchanges/$(VHOST)/fanout-stress \
 		-H 'Content-Type: application/json' \
 		-d '{"type":"fanout","durable":true}'
 	for i in 1 2 3 4 5; do \
-		curl -sf -u guest:guest \
-			-X PUT $(MGMT)/api/queues/%2F/fanout-queue-$$i \
+		curl -sf -u '$(_USERINFO)' \
+			-X PUT $(MGMT_URL)/api/queues/$(VHOST)/fanout-queue-$$i \
 			-H 'Content-Type: application/json' \
 			-d '{"durable":true,"arguments":{"x-queue-version":2}}' && \
-		curl -sf -u guest:guest \
-			-X POST $(MGMT)/api/bindings/%2F/e/fanout-stress/q/fanout-queue-$$i \
+		curl -sf -u '$(_USERINFO)' \
+			-X POST $(MGMT_URL)/api/bindings/$(VHOST)/e/fanout-stress/q/fanout-queue-$$i \
 			-H 'Content-Type: application/json' \
 			-d '{"routing_key":"","arguments":{}}'; \
 	done
@@ -136,7 +139,7 @@ fanout-setup:
 fanout-publisher:
 	date -u +'started: %Y-%m-%dT%H:%M:%SZ' > fanout_publisher.log
 	java $(JAVA_OPTS) -jar $(PERF_TEST_JAR) \
-		--uri $(URI) \
+		--uri '$(AMQP_URL)' \
 		--exchange fanout-stress \
 		--predeclared \
 		--flag persistent \
@@ -152,7 +155,7 @@ fanout-publisher:
 fanout-consumer:
 	date -u +'started: %Y-%m-%dT%H:%M:%SZ' > fanout_consumer.log
 	java $(JAVA_OPTS) -jar $(PERF_TEST_JAR) \
-		--uri $(URI) \
+		--uri '$(AMQP_URL)' \
 		--queue-pattern 'fanout-queue-%d' \
 		--queue-pattern-from 1 \
 		--queue-pattern-to 5 \
