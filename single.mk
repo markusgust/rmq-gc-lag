@@ -8,7 +8,7 @@ AMQP_URL ?= amqp://guest:guest@localhost:5672
 _USERINFO := $(shell echo '$(AMQP_URL)' | sed -n 's|^amqps\{0,1\}://\([^@]*\)@.*|\1|p')
 _HOST     := $(shell echo '$(AMQP_URL)' | sed -n 's|^amqps\{0,1\}://[^@]*@\([^:/]*\).*|\1|p')
 _VHOST    := $(shell echo '$(AMQP_URL)' | sed -n 's|^amqps\{0,1\}://[^@]*@[^/]*/\(.*\)|\1|p')
-MGMT_URL  ?= http://$(_HOST):15672
+MGMT_URL  ?= https://$(_HOST)
 VHOST     := $(if $(_VHOST),$(_VHOST),%2F)
 
 .ONESHELL:

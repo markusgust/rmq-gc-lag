@@ -11,7 +11,7 @@ _USERINFO := $(shell echo '$(AMQP_URL0)' | sed -n 's|^amqps\{0,1\}://\([^@]*\)@.
 _USER     := $(shell echo '$(_USERINFO)' | sed 's|:.*||')
 _HOST     := $(shell echo '$(AMQP_URL0)' | sed -n 's|^amqps\{0,1\}://[^@]*@\([^:/]*\).*|\1|p')
 _VHOST    := $(shell echo '$(AMQP_URL0)' | sed -n 's|^amqps\{0,1\}://[^@]*@[^/]*/\(.*\)|\1|p')
-MGMT_URL  ?= http://$(_HOST):15672
+MGMT_URL  ?= https://$(_HOST)
 VHOST     := $(if $(_VHOST),$(_VHOST),%2F)
 URIS      := $(AMQP_URL0),$(AMQP_URL1),$(AMQP_URL2)
 
